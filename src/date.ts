@@ -23,6 +23,10 @@ export function addHours(hours: number, ts: Date): Date {
     return new Date(ts.getTime() + hours * 3600000)
 }
 
+export function addSecond(seconds: number, ts: Date): Date {
+    return new Date(ts.getTime() + seconds * 1000)
+}
+
 export function isWorkingDay(ts: Date) {
     return 1 <= ts.getDay() && ts.getDay() <= 5
 }
