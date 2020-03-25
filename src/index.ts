@@ -1,9 +1,9 @@
 import { config as dotenv } from "dotenv"
 import * as yargs from "yargs"
+import * as Timesheet from "./timesheet"
 import * as ts from "./date"
 import * as JIRA from "./jira"
 import * as Outlook from "./outlook"
-import * as R from 'ramda'
 
 dotenv()
 
@@ -39,14 +39,11 @@ async function start({ debug, email, searchDays, computeDays }: { debug: boolean
     debug && console.info("EMAIL:", email)
     const tickets = await searchTickets({ debug, email, searchDays })
     const meetings = await searchMeetings({ debug, email, searchDays: computeDays })
-    const timesheet = await createTimesheet({ debug, tickets, meetings, computeDays })
+    const timesheet = await Timesheet.compute({ debug, tickets, meetings, computeDays })
     console.dir(timesheet, { depth: 3 })
 }
 
-type Ticket = { issue: string, from: Date, to: Date }
-type Meeting = { title: string, from: Date, to: Date }
-
-async function searchTickets({ debug, email, searchDays }: { debug: boolean, email: string, searchDays: number }): Promise<Ticket[]> {
+async function searchTickets({ debug, email, searchDays }: { debug: boolean, email: string, searchDays: number }): Promise<Timesheet.Ticket[]> {
     debug && console.group("\nSEARCH TICKETS:")
     const today: ts.Interval = { from: ts.today(), to: ts.addHours(Hours.Working + Hours.Lunch, ts.today()) }
     const user = await jira.getUser(email)
@@ -67,7 +64,7 @@ async function searchTickets({ debug, email, searchDays }: { debug: boolean, ema
         .all(found.map(issue => isMarkedAsWBSO(issue).then(marked => marked ? issue : null)))
         .then(issues => issues.filter((issue): issue is JIRA.Issue => issue !== null))
 
-    const tasks: Ticket[] = []
+    const tasks: Timesheet.Ticket[] = []
 
     for (const issue of issues) {
         debug && console.log("JIRA:ISSUE", issue.key)
@@ -76,7 +73,7 @@ async function searchTickets({ debug, email, searchDays }: { debug: boolean, ema
         if (changelog.maxResults < changelog.total) {
             changelog.histories = await jira.paged<JIRA.History>(q => jira.getChangelog(issue.id, q), "values")
         }
-        let state: Ticket & { assignee: string | null, status: string | null } = {
+        let state: Timesheet.Ticket & { assignee: string | null, status: string | null } = {
             issue: issue.key,
             assignee: null,
             status: null,
@@ -114,7 +111,7 @@ async function searchTickets({ debug, email, searchDays }: { debug: boolean, ema
     return tasks.sort((a, b) => b.to.getTime() - a.to.getTime())
 }
 
-async function searchMeetings({ debug, email, searchDays }: { debug: boolean, email: string, searchDays: number }): Promise<Meeting[]> {
+async function searchMeetings({ debug, email, searchDays }: { debug: boolean, email: string, searchDays: number }): Promise<Timesheet.Meeting[]> {
     debug && console.group("\NSEARCH MEETINGS:")
     const outlookUser = await outlook.getUser({ search: email })
     debug && console.log("OUTLOOK:USER", outlookUser)
@@ -137,103 +134,4 @@ async function searchMeetings({ debug, email, searchDays }: { debug: boolean, em
 
     debug && console.groupEnd()
     return meetings
-}
-
-function prepare<T extends { from: Date, to: Date }>(list: T[]) {
-    const sort: (e: T[]) => T[] = R.sortBy((e: T) => e.from.getTime())
-    const group: (e: T[]) => { [key: string]: T[] } = R.groupBy((e: T) => ts.date(e.from).toISOString().substr(0, 10))
-    const result = R.pipe(sort, group)(list)
-    console.dir(result)
-    return result
-
-    function split(a: T): T[] {
-        const result: T[] = []
-        let start = ts.date(a.from), end = ts.date(a.to)
-        if (start === end) {
-            result.push(a)
-        } else {
-            let r = { ...a }
-            r.from = ts.date(r.to)
-            let l = { ...a }
-            l.to = ts.addSecond(-1, ts.addDays(1, ts.date(l.from)))
-            result.push(l)
-            l = { ...l, from: ts.addDays(1, l.from), to: ts.addDays(1, l.to) }
-
-            while (l.to < r.from) {
-                result.push(l = { ...l, from: ts.addDays(1, l.from), to: ts.addDays(1, l.to) })
-            }
-            result.push(r)
-        }
-        return result
-    }
-}
-async function createTimesheet({ debug, tickets, meetings, computeDays }: { debug: boolean, tickets: Ticket[], meetings: Meeting[], computeDays: number }) {
-    debug && console.group("\nCOMPUTE TIMESHEET:")
-
-    const sortT: (e: Ticket[]) => Ticket[] = R.sortBy((e: Ticket) => e.from.getTime())
-    const groupT: (e: Ticket[]) => { [key: string]: Ticket[] } = R.groupBy((e: Ticket) => ts.date(e.from).toISOString().substr(0, 10))
-    const tickets2 = R.pipe(sortT, groupT)(tickets)
-    console.dir(tickets2)
-
-    const sortM: (e: Meeting[]) => Meeting[] = R.sortBy((e: Meeting) => e.from.getTime())
-    const groupM: (e: Meeting[]) => { [key: string]: Meeting[] } = R.groupBy((e: Meeting) => ts.date(e.from).toISOString().substr(0, 10))
-    const meetings2 = R.pipe(sortM, groupM)(meetings)
-    console.dir(meetings2)
-
-    // const today: ts.Interval = { from: ts.today(), to: ts.addHours(Hours.Working + Hours.Lunch, ts.today()) }
-    // const timesheet = []
-    // for (let day = 0; day < computeDays; day++) {
-    //     const date: ts.Interval = { from: ts.addDays(-day, today.from), to: ts.addDays(-day, today.to) }
-    //     if (ts.isWorkingDay(date.from)) {
-    //         const tasks = []
-    //         for (const state of tickets) {
-    //             // small ticket within 1 day
-    //             if (ts.date(date.from) === ts.date(state.from) && ts.date(state.from) === ts.date(state.to)) {
-    //                 tasks.push({
-    //                     issue: state.issue,
-    //                     duration: duration(state),
-    //                     from: state.from,
-    //                     to: state.to,
-    //                 })
-    //                 continue
-    //             }
-    //             // long ticket and intersection between days
-    //             const interval = ts.intersect(state, date)
-    //             if (interval !== undefined) {
-    //                 tasks.push({
-    //                     issue: state.issue,
-    //                     duration: duration(interval),
-    //                     from: interval.from,
-    //                     to: interval.to,
-    //                 })
-    //                 continue
-    //             }
-    //         }
-    //         if (tasks.length > 0) {
-    //             const include = limit(round(tasks.reduce((a, e) => a + e.duration, 0)))
-    //             const maxWorkingHours = Hours.Working - Hours.Interrupts
-    //             const exclude = Math.max(0, include - maxWorkingHours)
-    //             const total = include - exclude
-    //             timesheet.push({ date: date.from, total, include, exclude, tasks })
-    //         }
-    //     }
-    // }
-
-    debug && console.groupEnd()
-    return null // timesheet
-
-    function duration(interval: ts.Interval) {
-        let duration = round((interval.to.getTime() - interval.from.getTime()) / (60 * 60 * 1000))
-        const threshold = (Hours.Working / 2) + Hours.Lunch
-        if (threshold <= duration) duration -= Hours.Lunch
-        return limit(duration)
-    }
-
-    function round(hours: number) {
-        return Math.round(hours * 4) / 4 // round to 15mins
-    }
-
-    function limit(hours: number) {
-        return Math.min(Hours.Working, hours)
-    }
 }

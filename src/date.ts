@@ -8,11 +8,11 @@ export function now(): Date {
 
 export function today(): Date {
     const ts = now()
-    return new Date(Date.UTC(ts.getFullYear(), ts.getMonth(), ts.getDate(), 8, 30, 0, 0)) // 8:30am
+    return new Date(Date.UTC(ts.getUTCFullYear(), ts.getUTCMonth(), ts.getUTCDate(), 8, 30, 0, 0)) // 8:30am
 }
 
 export function date(ts: Date): Date {
-    return new Date(Date.UTC(ts.getFullYear(), ts.getMonth(), ts.getDate(), 0, 0, 0, 0))
+    return new Date(Date.UTC(ts.getUTCFullYear(), ts.getUTCMonth(), ts.getUTCDate(), 0, 0, 0, 0))
 }
 
 export function addDays(days: number, ts: Date): Date {
@@ -32,17 +32,12 @@ export function isWorkingDay(ts: Date) {
 }
 
 export type Interval = { from: Date, to: Date }
-export function intersect(a: Interval, b: Interval): Interval | undefined {
+export function intersect(a: Interval, b: Interval): Interval | null {
     if (a.from <= b.to && b.from <= a.to) {
         return {
             from: new Date(Math.max(a.from.getTime(), b.from.getTime())),
             to: new Date(Math.min(a.to.getTime(), b.to.getTime()))
         }
     }
-}
-
-export class Intervals {
-    constructor(intervals: Interval[]) {
-        Array.from(intervals).sort((a, b) => b.from.getTime() - a.from.getTime())
-    }
+    return null
 }
