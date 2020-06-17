@@ -137,8 +137,8 @@ export function createClient(options: { debug: boolean, baseUrl: string, usernam
         return rest(`2/search${qs(options)}`)
     }
 
-    async function getUser(username: string, project: string = "20880"): Promise<User> {
-        const json = await rest(`2/user/assignable/search${qs({ project, username })}`)
+    async function getUser(email: string, project: string = "20880"): Promise<User> {
+        const json = await rest(`3/user/search${qs({ query: email })}`)
         return json.length === 1 ? json[0] as User : Promise.reject("NOT_FOUND")
     }
 

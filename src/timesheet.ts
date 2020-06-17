@@ -8,44 +8,64 @@ export const Hours = Object.freeze({
 })
 
 export type Period = { from: Date, to: Date }
-export type Ticket = { issue: string } & Period
-export type Meeting = { title: string } & Period
+export type Ticket = { ticket: string } & Period
+export type Meeting = { meeting: string } & Period
 
 export async function compute({ debug, tickets, meetings, computeDays }: { debug: boolean, tickets: Ticket[], meetings: Meeting[], computeDays: number }) {
     debug && console.group("\nCOMPUTE TIMESHEET:")
 
-    console.dir(prepare(tickets, { since: ts.addDays(-computeDays, ts.today()) }))
-    console.dir(prepare(meetings, { since: ts.addDays(-computeDays, ts.today()) }))
+    const since = ts.addDays(-(computeDays-1), ts.date(ts.now()))
 
-    // const today: ts.Interval = { from: ts.today(), to: ts.addHours(Hours.Working + Hours.Lunch, ts.today()) }
-    // const timesheet = []
-    // for (let day = 0; day < computeDays; day++) {
-    //     const date: ts.Interval = { from: ts.addDays(-day, today.from), to: ts.addDays(-day, today.to) }
-    //     if (ts.isWorkingDay(date.from)) {
-    //         const tasks = []
-    //         for (const state of tickets) {
-    //             // small ticket within 1 day
-    //             if (ts.date(date.from) === ts.date(state.from) && ts.date(state.from) === ts.date(state.to)) {
-    //                 tasks.push({
-    //                     issue: state.issue,
-    //                     duration: duration(state),
-    //                     from: state.from,
-    //                     to: state.to,
-    //                 })
-    //                 continue
-    //             }
-    //             // long ticket and intersection between days
-    //             const interval = ts.intersect(state, date)
-    //             if (interval !== undefined) {
-    //                 tasks.push({
-    //                     issue: state.issue,
-    //                     duration: duration(interval),
-    //                     from: interval.from,
-    //                     to: interval.to,
-    //                 })
-    //                 continue
-    //             }
-    //         }
+    const ticketz = prepare(tickets, { since })
+    debug && console.info("TICKETS:")
+    debug && console.dir(ticketz)
+
+    const meetingz = prepare(meetings, { since })
+    debug && console.info("MEETINGS:")
+    debug && console.dir(meetingz)
+
+    const today: ts.Interval = { from: ts.workAt(ts.now()), to: ts.addHours(Hours.Working + Hours.Lunch, ts.workAt(ts.now())) }
+    const timesheet: any[] = []
+    for (let day = 0; day < computeDays; day++) {
+         const date: ts.Interval = { from: ts.addDays(-day, today.from), to: ts.addDays(-day, today.to) }
+         if (ts.isWorkingDay(date.from)) {
+            const tasks: any[] = []
+            const key = toISO(date.from, 10)
+            const includes = ticketz[key] || []
+            const excludes = meetingz[key] || []
+            console.log("date", key)
+            console.log("includes", includes)
+            console.log("excludes", excludes)
+            for (const ticket of includes) {
+                // small ticket within 1 day
+                if (ts.date(date.from) === ts.date(ticket.from) && ts.date(ticket.from) === ts.date(ticket.to)) {
+                    tasks.push({
+                        ticket: ticket.ticket,
+                        include: duration(ticket),
+                        from: ticket.from,
+                        to: ticket.to,
+                    })
+                    continue
+                }
+                // long ticket and intersection between days
+                const interval = ts.intersect(ticket, date)
+                if (interval !== null) {
+                    tasks.push({
+                        include: {
+                            ticket: ticket.ticket,
+                            duration: duration(interval),
+                            from: interval.from,
+                            to: interval.to
+                        },
+                        exclude: {
+
+                        }
+                    })
+                    continue
+                }
+            }
+            // TODO: warn task overlaps and exclude
+            console.log(`${key} tasks`, tasks)
     //         if (tasks.length > 0) {
     //             const include = limit(round(tasks.reduce((a, e) => a + e.duration, 0)))
     //             const maxWorkingHours = Hours.Working - Hours.Interrupts
@@ -53,11 +73,11 @@ export async function compute({ debug, tickets, meetings, computeDays }: { debug
     //             const total = include - exclude
     //             timesheet.push({ date: date.from, total, include, exclude, tasks })
     //         }
-    //     }
-    // }
+        }
+    }
 
     debug && console.groupEnd()
-    return null // timesheet
+    return timesheet
 
     function duration(interval: ts.Interval) {
         let duration = round((interval.to.getTime() - interval.from.getTime()) / (60 * 60 * 1000))
@@ -80,9 +100,13 @@ export function prepare<T extends Period>(list: T[], { since }: { since: Date })
     const removeOutdated = R.filter<T, "array">(it => it.to.getTime() >= since.getTime())
     const limitPeriod = R.map<T, T>(it => it.from.getTime() >= since.getTime() ? it : { ...it, from: since })
     const sortAsc: (list: readonly T[]) => T[] = R.sortBy((it: T) => it.from.getTime())
-    const groupByDate = R.groupBy((it: T) => ts.date(it.from).toISOString().substr(0, 10))
+    const groupByDate = R.groupBy((it: T) => toISO(it.from, 10))
     const result = R.pipe(removeOutdated, limitPeriod, R.map(splitByDate), R.flatten, sortAsc, groupByDate)(list)
     return result
+}
+
+function toISO(date: Date, number: 10) {
+    return ts.date(date).toISOString().substr(0, number)
 }
 
 export function splitByDate<T extends Period>(a: T): T[] {

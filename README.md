@@ -3,5 +3,5 @@
 ## How to use
 
 ```bash
-yarn start -e sergii.kolbasin@albelli.com
+yarn start --email sergii.kolbasin@albelli.com
 ```

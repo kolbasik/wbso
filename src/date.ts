@@ -6,13 +6,12 @@ export function now(): Date {
     return new Date(Date.now())
 }
 
-export function today(): Date {
-    const ts = now()
-    return new Date(Date.UTC(ts.getUTCFullYear(), ts.getUTCMonth(), ts.getUTCDate(), 8, 30, 0, 0)) // 8:30am
-}
-
 export function date(ts: Date): Date {
     return new Date(Date.UTC(ts.getUTCFullYear(), ts.getUTCMonth(), ts.getUTCDate(), 0, 0, 0, 0))
+}
+
+export function dateEnd(ts: Date): Date {
+    return new Date(Date.UTC(ts.getUTCFullYear(), ts.getUTCMonth(), ts.getUTCDate(), 23, 59, 59, 999))
 }
 
 export function addDays(days: number, ts: Date): Date {
@@ -29,6 +28,10 @@ export function addSecond(seconds: number, ts: Date): Date {
 
 export function isWorkingDay(ts: Date) {
     return 1 <= ts.getDay() && ts.getDay() <= 5
+}
+
+export function workAt(ts: Date): Date {
+    return new Date(Date.UTC(ts.getUTCFullYear(), ts.getUTCMonth(), ts.getUTCDate(), 8, 30, 0, 0))
 }
 
 export type Interval = { from: Date, to: Date }
